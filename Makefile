@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := build
 
-.PHONY: fmt vet lint test build run clean ui-build ui-dev
+.PHONY: fmt vet lint test build run clean ui-build ui-dev generate
 
 # Frontend
 ui-build:
@@ -8,6 +8,10 @@ ui-build:
 
 ui-dev:
 	cd ui && npm run dev
+
+# Code generation
+generate:
+	sqlc generate
 
 # Go linting
 fmt:
@@ -24,7 +28,7 @@ test:
 	go test ./...
 
 # Build (requires ui/dist to exist)
-build: ui-build
+build: ui-build generate
 	go build -o bin/server ./cmd/server
 
 # Run the built binary

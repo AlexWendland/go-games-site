@@ -2,8 +2,8 @@ package web
 
 import (
 	"io/fs"
-	"net/http"
 	"log"
+	"net/http"
 
 	"github.com/AlexWendland/go-games-site/ui"
 )

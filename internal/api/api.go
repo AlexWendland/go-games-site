@@ -1,9 +1,11 @@
 package api
 
 import (
-	"net/http"
 	"encoding/json"
 	"fmt"
+	"net/http"
+
+	"github.com/AlexWendland/go-games-site/internal/db"
 )
 
 type SimpleResponse struct {
@@ -22,8 +24,7 @@ func hello(w http.ResponseWriter, req *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-
-func ApiHandler() http.Handler {
+func ApiHandler(dbConnection *db.DB) http.Handler {
 	apiRouter := http.NewServeMux()
 
 	apiRouter.HandleFunc("GET /hello", hello)
