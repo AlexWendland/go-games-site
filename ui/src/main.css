@@ -3,7 +3,7 @@
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 
 @theme {
-  --font-sans: "Comic_Neue", sans-serif;
+  --font-sans: "Comic Neue", sans-serif;
 
   /* Primary colors */
   --color-orange-050: #ffe8d9;
