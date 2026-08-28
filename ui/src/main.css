@@ -1,1 +1,99 @@
 @import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+@theme {
+  --font-sans: "Comic_Neue", sans-serif;
+
+  /* Primary colors */
+  --color-orange-050: #ffe8d9;
+  --color-orange-100: #ffd0b5;
+  --color-orange-200: #ffb088;
+  --color-orange-300: #ff9466;
+  --color-orange-400: #f9703e;
+  --color-orange-500: #f35627;
+  --color-orange-600: #de3a11;
+  --color-orange-700: #c52707;
+  --color-orange-800: #ad1d07;
+  --color-orange-900: #841003;
+
+  --color-brand: #ad1d07;
+
+  /* Neutral colors */
+  --color-gray-050: #f5f7fa;
+  --color-gray-100: #e4e7eb;
+  --color-gray-200: #cbd2d9;
+  --color-gray-300: #9aa5b1;
+  --color-gray-400: #7b8794;
+  --color-gray-500: #616e7c;
+  --color-gray-600: #52606d;
+  --color-gray-700: #3e4c59;
+  --color-gray-800: #323f4b;
+  --color-gray-900: #1f2933;
+
+  /* Supporting colors */
+  --color-blue-050: #e0e8f9;
+  --color-blue-100: #bed0f7;
+  --color-blue-200: #98aeeb;
+  --color-blue-300: #7b93db;
+  --color-blue-400: #647acb;
+  --color-blue-500: #4c63b6;
+  --color-blue-600: #4055a8;
+  --color-blue-700: #35469c;
+  --color-blue-800: #2d3a8c;
+  --color-blue-900: #19216c;
+
+  --color-red-050: #ffeeee;
+  --color-red-100: #facdcd;
+  --color-red-200: #f29b9b;
+  --color-red-300: #e66a6a;
+  --color-red-400: #d64545;
+  --color-red-500: #ba2525;
+  --color-red-600: #a61b1b;
+  --color-red-700: #911111;
+  --color-red-800: #780a0a;
+  --color-red-900: #610404;
+
+  --color-yellow-050: #fffaeb;
+  --color-yellow-100: #fcefc7;
+  --color-yellow-200: #f8e3a3;
+  --color-yellow-300: #f9da8b;
+  --color-yellow-400: #f7d070;
+  --color-yellow-500: #e9b949;
+  --color-yellow-600: #c99a2e;
+  --color-yellow-700: #a27c1a;
+  --color-yellow-800: #7c5e10;
+  --color-yellow-900: #513c06;
+
+  --color-green-050: #e3f9e5;
+  --color-green-100: #c1eac5;
+  --color-green-200: #a3d9a5;
+  --color-green-300: #7bc47f;
+  --color-green-400: #57ae5b;
+  --color-green-500: #3f9142;
+  --color-green-600: #2f8132;
+  --color-green-700: #207227;
+  --color-green-800: #0e5814;
+  --color-green-900: #05400a;
+
+  --color-black: #0d0d0d;
+  --color-white: #f2f2f2;
+
+  /* Animations */
+
+  --animate-scaleBounce: scaleBounce 5s ease-in-out infinite;
+
+  @keyframes scaleBounce {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.2);
+    }
+  }
+}
+
+body {
+  font-family: var(--font-sans);
+}
