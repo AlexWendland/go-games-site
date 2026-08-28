@@ -8,7 +8,7 @@ import (
 	"github.com/AlexWendland/go-games-site/ui"
 )
 
-func NewHandler() http.Handler {
+func WebServerHandler() http.Handler {
 	sub, err := fs.Sub(ui.FS, "dist")
 	if err != nil {
 		log.Fatal("dist directory not found in embedded filesystem")
