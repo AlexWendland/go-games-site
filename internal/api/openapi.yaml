@@ -1,0 +1,186 @@
+openapi: "3.0.0"
+info:
+  title: Alex's Game Site API
+  version: "1.0.0"
+
+security:
+  - cookieAuth: []
+
+paths:
+  /api/auth:
+    post:
+      summary: Log in
+      operationId: logIn
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogInRequest'
+      responses:
+        '200':
+          description: user logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      summary: Log out the current user
+      operationId: deleteSession
+      responses:
+        '204':
+          description: Logged out
+        '401':
+          $ref: '#/components/responses/Unauthorised'
+    get:
+      summary: Checks the current auth token to see if you are logged in
+      operationId: checkSession
+      responses:
+        '200':
+          description: user logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorised'
+        
+
+  /api/user:
+    get:
+      summary: Check if user exists
+      operationId: checkIfUserExists
+      security: []
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      summary: Create user
+      operationId: createUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    put:
+      summary: Update display name
+      operationId: updateDisplayName
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: Display name updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorised'
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: session
+
+  schemas:
+    LogInRequest:
+      type: object
+      required:
+        - user_id
+      properties:
+        user_id:
+          type: string
+
+    CreateUserRequest:
+      type: object
+      required:
+        - user_id
+        - display_name
+      properties:
+        user_id:
+          type: string
+        display_name:
+          type: string
+
+    UpdateUserRequest:
+      type: object
+      required:
+        - display_name
+      properties:
+        display_name:
+          type: string
+
+    UserResponse:
+      type: object
+      properties:
+        user_id:
+          type: string
+        display_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        is_active:
+          type: boolean
+
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorised:
+      description: Not authenticated
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

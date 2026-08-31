@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := build
 
-.PHONY: fmt vet lint test build run clean ui-build ui-dev generate
+.PHONY: fmt vet lint test build run clean ui-build ui-dev generate run-ui-backend run-ui-frontend docker-build
 
 # Frontend
 ui-build:
@@ -10,8 +10,10 @@ ui-dev:
 	cd ui && npm run dev
 
 # Code generation
-generate:
+generate: ui-build
 	sqlc generate
+	oapi-codegen --config oapi-codegen.yaml internal/api/openapi.yaml
+	cd ui && npx openapi-typescript ../internal/api/openapi.yaml -o src/api/types.ts
 
 # Go linting
 fmt:
@@ -31,11 +33,30 @@ test:
 build: ui-build generate
 	go build -o bin/server ./cmd/server
 
-# Run the built binary
-run: build
+# Run backend only, expecting frontend on :5173 (ui-dev mode)
+run-ui-backend: build
+	APP_ENV=development \
+	BASE_URL=http://localhost:8080 \
+	ALLOWED_ORIGINS=http://localhost:5173 \
 	./bin/server
+
+# Run frontend dev server pointing at backend on :8080
+run-ui-frontend:
+	cd ui && npm run dev
+
+# Run everything off the same server (production-like)
+run: build
+	APP_ENV=development \
+	BASE_URL=http://localhost:8080 \
+	ALLOWED_ORIGINS=http://localhost:8080 \
+	./bin/server
+
+# Build and test the docker image locally
+docker-build:
+	docker build -t go-games-site:local .
 
 # Clean build artifacts
 clean:
 	go clean
 	rm -rf bin/ ui/dist/
+	rm games.db*
