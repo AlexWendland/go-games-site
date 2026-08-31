@@ -1,8 +1,8 @@
 # Stage 1: build the frontend
-FROM node:22-alpine AS ui-builder
+FROM node:24-alpine AS ui-builder
 WORKDIR /app/ui
 COPY ui/package*.json ./
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 COPY ui/ ./
 RUN npm run build
 
