@@ -2,48 +2,22 @@ package config
 
 import (
 	"log/slog"
-	"os"
-	"strconv"
-	"strings"
+
+	"github.com/kelseyhightower/envconfig"
 )
 
+// See below for syntax:
+// https://pkg.go.dev/github.com/kelseyhightower/envconfig#section-readme
 type Config struct {
-	Production     bool
-	Port           int
-	BaseURL        string
-	AllowedOrigins []string
-	DatabaseFile   string
+	Production     bool     `default:"false"`
+	Port           int      `default:"8080"`
+	BaseURL        string   `default:"http://localhost:8080" split_words:"true"`
+	AllowedOrigins []string `default:"http://localhost:5173" split_words:"true"`
+	DatabaseFile   string   `default:"games.db" split_words:"true"`
 }
 
-func getEnv(key, defaultValue string) string {
-	if value, ok := os.LookupEnv(key); ok {
-		return value
-	}
-	return defaultValue
-}
-
-func getEnvInt(key string, defaultValue int) int {
-	if value, ok := os.LookupEnv(key); ok {
-		num, err := strconv.Atoi(value)
-		if err != nil {
-			slog.Error("failed to parse env var as int", "key", key, "value", value)
-			os.Exit(1)
-		}
-		return num
-	}
-	return defaultValue
-
-}
-
-func getEnvList(key string, defaultValue []string) []string {
-	if value, ok := os.LookupEnv(key); ok {
-		return strings.Split(value, ",")
-	}
-	return defaultValue
-}
-
-func printConfig(config Config) {
-	slog.Info("config loaded",
+func PrintConfig(config *Config) {
+	slog.Info("current config",
 		"production", config.Production,
 		"port", config.Port,
 		"base_url", config.BaseURL,
@@ -52,14 +26,10 @@ func printConfig(config Config) {
 	)
 }
 
-func Load() Config {
-	config := Config{
-		Production:     getEnv("APP_ENV", "development") == "production",
-		Port:           getEnvInt("PORT", 8080),
-		BaseURL:        getEnv("BASE_URL", "http://localhost:8080"),
-		AllowedOrigins: getEnvList("ALLOWED_ORIGINS", []string{"http://localhost:5173"}),
-		DatabaseFile:   getEnv("DATABASE_FILE", "games.db"),
+func Load() (*Config, error) {
+	var this Config
+	if err := envconfig.Process("games", &this); err != nil {
+		return nil, err
 	}
-	printConfig(config)
-	return config
+	return &this, nil
 }

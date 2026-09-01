@@ -16,14 +16,11 @@ generate: ui-build
 	cd ui && npx openapi-typescript ../internal/api/openapi.yaml -o src/api/types.ts
 
 # Go linting
-fmt:
+lint:
 	fd -e go --exec goimports -w
 	go fmt ./...
-
-vet: fmt
 	go vet ./...
-
-lint: vet
+	go mod tidy
 	golangci-lint run ./...
 
 # Tests
@@ -36,9 +33,9 @@ build: ui-build generate
 
 # Run backend only, expecting frontend on :5173 (ui-dev mode)
 run-ui-backend: build
-	APP_ENV=development \
-	BASE_URL=http://localhost:8080 \
-	ALLOWED_ORIGINS=http://localhost:5173 \
+	GAMES_PRODUCTION=false \
+	GAMES_BASE_URL=http://localhost:8080 \
+	GAMES_ALLOWED_ORIGINS=http://localhost:5173 \
 	./bin/server
 
 # Run frontend dev server pointing at backend on :8080
@@ -47,9 +44,9 @@ run-ui-frontend:
 
 # Run everything off the same server (production-like)
 run: build
-	APP_ENV=development \
-	BASE_URL=http://localhost:8080 \
-	ALLOWED_ORIGINS=http://localhost:8080 \
+	GAMES_PRODUCTION=false \
+	GAMES_BASE_URL=http://localhost:8080 \
+	GAMES_ALLOWED_ORIGINS=http://localhost:8080 \
 	./bin/server
 
 # Build and test the docker image locally

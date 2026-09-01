@@ -19,11 +19,16 @@ import (
 
 func main() {
 	// Set up logger
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
 	// Read environment variables
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		logger.Error("cannot read environment variables", slog.Any("error", err))
+		return
+	}
+	config.PrintConfig(cfg)
 
 	// Set up database
 	dbConnection, err := db.Open(cfg.DatabaseFile, migrations.FS)
@@ -55,7 +60,7 @@ func main() {
 	// Add handlers here
 	server.Handle("/", web.WebServerHandler())
 	server.Handle("/api/", corsMiddleware.Handler(
-		http.StripPrefix("/api", api.ApiHandler(&cfg, authService, userService, middleware.Auth(authService))),
+		http.StripPrefix("/api", api.ApiHandler(cfg, authService, userService, middleware.Auth(authService))),
 	))
 
 	addr := fmt.Sprintf(":%d", cfg.Port)
