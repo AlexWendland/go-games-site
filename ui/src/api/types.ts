@@ -240,7 +240,15 @@ export interface operations {
                     "application/json": components["schemas"]["UserResponse"];
                 };
             };
-            400: components["responses"]["BadRequest"];
+            /** @description User already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
         };
     };
 }

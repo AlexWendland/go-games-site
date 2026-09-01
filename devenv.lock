@@ -3,17 +3,54 @@
     "devenv": {
       "locked": {
         "dir": "src/modules",
-        "lastModified": 1787871746,
-        "narHash": "sha256-2xuSYVSCZZfdy40u4AqBIyR7p9qBO3EjLeTujiJVn7c=",
+        "lastModified": 1788213407,
+        "narHash": "sha256-zxEb+L6moGAWY+HXqAOTKIBb7tNYYWc+Km1+6byphb0=",
         "owner": "cachix",
         "repo": "devenv",
-        "rev": "9ef9292c877fa99e3f08269e846ff383fb559172",
+        "rev": "97135e80b6e432f41f84f72383e1b8147f33ef0c",
         "type": "github"
       },
       "original": {
         "dir": "src/modules",
         "owner": "cachix",
         "repo": "devenv",
+        "type": "github"
+      }
+    },
+    "flake-compat": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1767039857,
+        "narHash": "sha256-vNpUSpF5Nuw8xvDLj2KCwwksIbjua2LZCqhV1LNRDns=",
+        "owner": "NixOS",
+        "repo": "flake-compat",
+        "rev": "5edf11c44bc78a0d334f6334cdaf7d60d732daab",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "flake-compat",
+        "type": "github"
+      }
+    },
+    "git-hooks": {
+      "inputs": {
+        "flake-compat": "flake-compat",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1788267358,
+        "narHash": "sha256-nt+lUqYVpc9Y6JeMd2WmXzCDojasdadKo0mWcluvY2Y=",
+        "owner": "cachix",
+        "repo": "git-hooks.nix",
+        "rev": "27555e2624241fb116b49095df4caaee85a25691",
+        "type": "github"
+      },
+      "original": {
+        "owner": "cachix",
+        "repo": "git-hooks.nix",
         "type": "github"
       }
     },
@@ -56,6 +93,7 @@
     "root": {
       "inputs": {
         "devenv": "devenv",
+        "git-hooks": "git-hooks",
         "nixpkgs": "nixpkgs"
       }
     }

@@ -13,12 +13,12 @@ func swaggerUIHandler() http.Handler {
 
 	mux.HandleFunc("GET /openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/yaml")
-		w.Write(openapiSpec)
+		_, _ = w.Write(openapiSpec)
 	})
 
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		w.Write([]byte(`<!doctype html>
+		_, _ = w.Write([]byte(`<!doctype html>
 <html>
   <head>
     <title>Go Games Site API Docs</title>

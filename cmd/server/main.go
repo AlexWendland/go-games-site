@@ -31,7 +31,11 @@ func main() {
 		logger.Error("can not open database connection", slog.Any("error", err))
 		return
 	}
-	defer dbConnection.Close()
+	defer func() {
+		if err := dbConnection.Close(); err != nil {
+			slog.Error("failed to close database connection", slog.Any("error", err))
+		}
+	}()
 
 	// Set up services
 	authService := service.MakeAuthService(dbConnection)

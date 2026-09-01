@@ -5,21 +5,23 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/AlexWendland/go-games-site/internal/service"
+	"github.com/AlexWendland/go-games-site/internal/domain"
 )
 
-const UserContextKey string = "user"
-const TokenContextKey string = "token"
+type contextKey string
+
+const UserContextKey contextKey = "user"
+const TokenContextKey contextKey = "token"
 
 type AuthService interface {
-	GetUserBySession(ctx context.Context, token string, currentTime time.Time) (*service.User, error)
+	GetUserBySession(ctx context.Context, token string, currentTime time.Time) (*domain.User, error)
 }
 
 func Auth(authService AuthService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Get token from request
-			token, err := r.Cookie(service.SessionCookieName)
+			token, err := r.Cookie(domain.SessionCookieName)
 			if err != nil {
 				http.Error(w, "unauthorised", http.StatusUnauthorized)
 				return
@@ -40,8 +42,8 @@ func Auth(authService AuthService) func(http.Handler) http.Handler {
 	}
 }
 
-func UserFromContext(ctx context.Context) (*service.User, bool) {
-	user, ok := ctx.Value(UserContextKey).(*service.User)
+func UserFromContext(ctx context.Context) (*domain.User, bool) {
+	user, ok := ctx.Value(UserContextKey).(*domain.User)
 	return user, ok
 }
 
