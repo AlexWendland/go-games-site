@@ -88,8 +88,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
     put:
       summary: Update display name
       operationId: updateDisplayName

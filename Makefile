@@ -17,6 +17,7 @@ generate: ui-build
 
 # Go linting
 fmt:
+	fd -e go --exec goimports -w
 	go fmt ./...
 
 vet: fmt

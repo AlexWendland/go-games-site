@@ -3,16 +3,14 @@ package service
 import (
 	"context"
 	"crypto/rand"
-	"errors"
-	"github.com/AlexWendland/go-games-site/internal/db"
 	"time"
+
+	"github.com/AlexWendland/go-games-site/internal/db"
+	"github.com/AlexWendland/go-games-site/internal/domain"
 )
 
 const (
-	SessionCookieName           = "session"
-	UserIDCookieName            = "user_id"
-	SessionExpriationCookieName = "session_expires_at"
-	DayInNanoSeconds            = 86_400_000_000_000
+	DayInNanoSeconds = 86_400_000_000_000
 )
 
 type AuthService struct {
@@ -23,7 +21,7 @@ func MakeAuthService(db *db.DB) *AuthService {
 	return &AuthService{db}
 }
 
-func (as AuthService) LogIn(ctx context.Context, userID string, createdAt time.Time) (*User, *Session, error) {
+func (as AuthService) LogIn(ctx context.Context, userID string, createdAt time.Time) (*domain.User, *domain.Session, error) {
 	var user db.User
 	var session db.Session
 
@@ -32,7 +30,7 @@ func (as AuthService) LogIn(ctx context.Context, userID string, createdAt time.T
 		var err error
 		user, err = q.GetActiveUserByUserID(ctx, userID)
 		if err != nil {
-			return ErrUserNotFound
+			return domain.ErrUserNotFound
 		}
 		token := rand.Text()
 		session, err = q.CreateSession(ctx, db.CreateSessionParams{
@@ -42,7 +40,7 @@ func (as AuthService) LogIn(ctx context.Context, userID string, createdAt time.T
 			ExpiresAt:    createdAt.Add(DayInNanoSeconds),
 		})
 		if err != nil {
-			return errors.New("could not create session")
+			return domain.ErrDatabase
 		}
 		return nil
 	})
@@ -51,17 +49,20 @@ func (as AuthService) LogIn(ctx context.Context, userID string, createdAt time.T
 		return nil, nil, err
 	}
 
-	return toUser(user), &Session{Token: session.SessionToken, CreatedAt: session.CreatedAt, ExpiresAt: session.ExpiresAt}, nil
+	return toUser(user), &domain.Session{Token: session.SessionToken, CreatedAt: session.CreatedAt, ExpiresAt: session.ExpiresAt}, nil
 }
 
 func (as AuthService) LogOut(ctx context.Context, token string) error {
-	return as.db.DeleteSessionByToken(ctx, token)
+	if as.db.DeleteSessionByToken(ctx, token) != nil {
+		return domain.ErrDatabase
+	}
+	return nil
 }
 
-func (as AuthService) GetUserBySession(ctx context.Context, token string, currentTime time.Time) (*User, error) {
+func (as AuthService) GetUserBySession(ctx context.Context, token string, currentTime time.Time) (*domain.User, error) {
 	user, err := as.db.GetActiveUserBySessionToken(ctx, db.GetActiveUserBySessionTokenParams{SessionToken: token, ExpiresAt: currentTime})
 	if err != nil {
-		return nil, err
+		return nil, domain.ErrSessionNotFound
 	}
 	return toUser(user), nil
 }

@@ -36,7 +36,9 @@ func Open(dbPath string, migrationsFS fs.FS) (*DB, error) {
 	}
 
 	goose.SetBaseFS(migrationsFS)
-	goose.SetDialect("sqlite3")
+	if err := goose.SetDialect("sqlite3"); err != nil {
+		return nil, fmt.Errorf("incorrect database type: %w", err)
+	}
 	if err := goose.Up(sqlDB, "."); err != nil {
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}
