@@ -19,6 +19,7 @@ type DB struct {
 // Open opens a SQLite database at the given path, applies any pending migrations,
 // and returns a DB ready for use.
 func Open(dbPath string, migrationsFS fs.FS) (*DB, error) {
+	// Open and configure connection
 	sqlDB, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
@@ -35,6 +36,7 @@ func Open(dbPath string, migrationsFS fs.FS) (*DB, error) {
 		return nil, fmt.Errorf("enable WAL mode: %w", err)
 	}
 
+	// Perform migrations to bring the database up to date.
 	goose.SetBaseFS(migrationsFS)
 	if err := goose.SetDialect("sqlite3"); err != nil {
 		return nil, fmt.Errorf("incorrect database type: %w", err)

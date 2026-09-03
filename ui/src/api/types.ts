@@ -57,11 +57,11 @@ export interface components {
             display_name: string;
         };
         UserResponse: {
-            user_id?: string;
-            display_name?: string;
+            user_id: string;
+            display_name: string;
             /** Format: date-time */
-            created_at?: string;
-            is_active?: boolean;
+            created_at: string;
+            is_active: boolean;
         };
         Error: {
             message?: string;

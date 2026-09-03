@@ -12,14 +12,13 @@ import (
 	"github.com/AlexWendland/go-games-site/internal/config"
 	"github.com/AlexWendland/go-games-site/internal/db"
 	"github.com/AlexWendland/go-games-site/internal/db/migrations"
-	"github.com/AlexWendland/go-games-site/internal/middleware"
 	"github.com/AlexWendland/go-games-site/internal/service"
 	"github.com/AlexWendland/go-games-site/internal/web"
 )
 
 func main() {
 	// Set up logger
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
 	// Read environment variables
@@ -60,7 +59,7 @@ func main() {
 	// Add handlers here
 	server.Handle("/", web.WebServerHandler())
 	server.Handle("/api/", corsMiddleware.Handler(
-		http.StripPrefix("/api", api.ApiHandler(cfg, authService, userService, middleware.Auth(authService))),
+		http.StripPrefix("/api", api.ApiHandler(cfg, authService, userService)),
 	))
 
 	addr := fmt.Sprintf(":%d", cfg.Port)
