@@ -57,4 +57,6 @@ docker-build:
 clean:
 	go clean
 	rm -rf bin/ ui/dist/
-	rm games.db*
+	mkdir ui/dist
+	touch ui/dist/.gitkeep
+	rm -f games.db*

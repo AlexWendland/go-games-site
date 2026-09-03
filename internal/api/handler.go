@@ -9,12 +9,14 @@ import (
 
 	"github.com/AlexWendland/go-games-site/internal/config"
 	"github.com/AlexWendland/go-games-site/internal/domain"
-	"github.com/AlexWendland/go-games-site/internal/middleware"
 )
 
 type AuthService interface {
 	LogIn(ctx context.Context, userID string, createdAt time.Time) (*domain.User, *domain.Session, error)
 	LogOut(ctx context.Context, token string) error
+	AuthMiddleware(http.Handler) http.Handler
+	UserFromRequest(r *http.Request) (*domain.User, bool)
+	TokenFromRequest(r *http.Request) (string, bool)
 }
 
 type UserService interface {
@@ -31,10 +33,10 @@ type Handler struct {
 
 func toUserResponse(u *domain.User) UserResponse {
 	return UserResponse{
-		UserId:      &u.UserId,
-		DisplayName: &u.DisplayName,
-		CreatedAt:   &u.CreatedAt,
-		IsActive:    &u.IsActive,
+		UserId:      u.UserId,
+		DisplayName: u.DisplayName,
+		CreatedAt:   u.CreatedAt,
+		IsActive:    u.IsActive,
 	}
 }
 
@@ -44,9 +46,13 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// /auth endpoints
+
 func (h Handler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	var req LogInRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil || req.UserId == "" {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
@@ -57,10 +63,8 @@ func (h Handler) CreateSession(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "unauthorised", http.StatusUnauthorized)
 			return
 		}
-		if errors.Is(err, domain.ErrDatabase) {
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
 	}
 
 	http.SetCookie(w, &http.Cookie{
@@ -91,7 +95,7 @@ func (h Handler) CreateSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h Handler) DeleteSession(w http.ResponseWriter, r *http.Request) {
-	token, ok := middleware.TokenFromContext(r.Context())
+	token, ok := h.authService.TokenFromRequest(r)
 	if !ok {
 		http.Error(w, "unauthorised", http.StatusUnauthorized)
 		return
@@ -100,7 +104,87 @@ func (h Handler) DeleteSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     domain.SessionCookieName,
+		Value:    "",
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   h.cfg.Production,
+		Path:     "/",
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name:     domain.UserIDCookieName,
+		Value:    "",
+		MaxAge:   -1,
+		HttpOnly: false,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   h.cfg.Production,
+		Path:     "/",
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name:     domain.SessionExpriationCookieName,
+		Value:    "",
+		MaxAge:   -1,
+		HttpOnly: false,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   h.cfg.Production,
+		Path:     "/",
+	})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h Handler) GetSession(w http.ResponseWriter, r *http.Request) {
+	user, ok := h.authService.UserFromRequest(r)
+	if !ok {
+		http.Error(w, "user did not exist", http.StatusUnauthorized)
+		return
+	}
+	writeJSON(w, http.StatusOK, toUserResponse(user))
+}
+
+// /user endpoints
+
+func (h Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
+	var req CreateUserRequest
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	user, err := h.userService.CreateUser(r.Context(), req.UserId, req.DisplayName, time.Now())
+	if err != nil {
+		if errors.Is(err, domain.ErrUserExists) {
+			http.Error(w, "user already exists", http.StatusConflict)
+			return
+		}
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusCreated, toUserResponse(user))
+}
+
+func (h Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	var req UpdateUserRequest
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	user, ok := h.authService.UserFromRequest(r)
+	if !ok {
+		http.Error(w, "unauthorised", http.StatusUnauthorized)
+		return
+	}
+	newUser, err := h.userService.UpdateDisplayName(r.Context(), user.UserId, req.DisplayName)
+	if err != nil {
+		http.Error(w, "user did not exist", http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, http.StatusOK, toUserResponse(newUser))
 }
 
 func (h Handler) GetUser(w http.ResponseWriter, r *http.Request) {
@@ -121,51 +205,9 @@ func (h Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toUserResponse(user))
 }
 
-func (h Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
-	var req CreateUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
-		return
-	}
-	user, err := h.userService.CreateUser(r.Context(), req.UserId, req.DisplayName, time.Now())
-	if err != nil {
-		if errors.Is(err, domain.ErrUserExists) {
-			http.Error(w, "user already exists", http.StatusConflict)
-			return
-		}
-	}
-	writeJSON(w, http.StatusCreated, toUserResponse(user))
-}
+// Entry point
 
-func (h Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
-	var req UpdateUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
-		return
-	}
-	user, ok := middleware.UserFromContext(r.Context())
-	if !ok {
-		http.Error(w, "unauthorised", http.StatusUnauthorized)
-		return
-	}
-	newUser, err := h.userService.UpdateDisplayName(r.Context(), user.UserId, req.DisplayName)
-	if err != nil {
-		http.Error(w, "user did not exist", http.StatusBadRequest)
-		return
-	}
-	writeJSON(w, http.StatusOK, toUserResponse(newUser))
-}
-
-func (h Handler) GetSession(w http.ResponseWriter, r *http.Request) {
-	user, ok := middleware.UserFromContext(r.Context())
-	if !ok {
-		http.Error(w, "user did not exist", http.StatusUnauthorized)
-		return
-	}
-	writeJSON(w, http.StatusOK, toUserResponse(user))
-}
-
-func ApiHandler(cfg *config.Config, authService AuthService, userService UserService, authMiddleware func(http.Handler) http.Handler) http.Handler {
+func ApiHandler(cfg *config.Config, authService AuthService, userService UserService) http.Handler {
 	apiRouter := http.NewServeMux()
 	h := Handler{cfg, authService, userService}
 
@@ -174,13 +216,13 @@ func ApiHandler(cfg *config.Config, authService AuthService, userService UserSer
 
 	// Auth routes
 	apiRouter.HandleFunc("POST /auth", h.CreateSession)
-	apiRouter.Handle("DELETE /auth", authMiddleware(http.HandlerFunc(h.DeleteSession)))
-	apiRouter.Handle("GET /auth", authMiddleware(http.HandlerFunc(h.GetSession)))
+	apiRouter.Handle("DELETE /auth", authService.AuthMiddleware(http.HandlerFunc(h.DeleteSession)))
+	apiRouter.Handle("GET /auth", authService.AuthMiddleware(http.HandlerFunc(h.GetSession)))
 
 	// User routes
 	apiRouter.HandleFunc("GET /user", h.GetUser)
 	apiRouter.HandleFunc("POST /user", h.CreateUser)
-	apiRouter.Handle("PUT /user", authMiddleware(http.HandlerFunc(h.UpdateUser)))
+	apiRouter.Handle("PUT /user", authService.AuthMiddleware(http.HandlerFunc(h.UpdateUser)))
 
 	return apiRouter
 }

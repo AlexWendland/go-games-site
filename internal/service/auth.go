@@ -3,14 +3,19 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"net/http"
 	"time"
 
 	"github.com/AlexWendland/go-games-site/internal/db"
 	"github.com/AlexWendland/go-games-site/internal/domain"
 )
 
+type contextKey string
+
 const (
-	DayInNanoSeconds = 86_400_000_000_000
+	DayInNanoSeconds            = 86_400_000_000_000
+	userContextKey   contextKey = "user"
+	tokenContextKey  contextKey = "token"
 )
 
 type AuthService struct {
@@ -65,4 +70,37 @@ func (as AuthService) GetUserBySession(ctx context.Context, token string, curren
 		return nil, domain.ErrSessionNotFound
 	}
 	return toUser(user), nil
+}
+
+func (as AuthService) AuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Get token from request
+		token, err := r.Cookie(domain.SessionCookieName)
+		if err != nil {
+			http.Error(w, "unauthorised", http.StatusUnauthorized)
+			return
+		}
+
+		// Validate token against database
+		user, err := as.GetUserBySession(r.Context(), token.Value, time.Now())
+		if err != nil {
+			http.Error(w, "unauthorised", http.StatusUnauthorized)
+			return
+		}
+
+		// Attach user and token to context
+		ctx := context.WithValue(r.Context(), userContextKey, user)
+		ctx = context.WithValue(ctx, tokenContextKey, token.Value)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func (as AuthService) UserFromRequest(r *http.Request) (*domain.User, bool) {
+	user, ok := r.Context().Value(userContextKey).(*domain.User)
+	return user, ok
+}
+
+func (as AuthService) TokenFromRequest(r *http.Request) (string, bool) {
+	token, ok := r.Context().Value(tokenContextKey).(string)
+	return token, ok
 }

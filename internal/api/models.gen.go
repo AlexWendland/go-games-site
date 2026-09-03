@@ -30,10 +30,10 @@ type UpdateUserRequest struct {
 
 // UserResponse defines model for UserResponse.
 type UserResponse struct {
-	CreatedAt   *time.Time `json:"created_at,omitempty"`
-	DisplayName *string    `json:"display_name,omitempty"`
-	IsActive    *bool      `json:"is_active,omitempty"`
-	UserId      *string    `json:"user_id,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+	DisplayName string    `json:"display_name"`
+	IsActive    bool      `json:"is_active"`
+	UserId      string    `json:"user_id"`
 }
 
 // BadRequest defines model for BadRequest.

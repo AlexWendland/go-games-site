@@ -152,6 +152,11 @@ components:
 
     UserResponse:
       type: object
+      required:
+        - user_id
+        - display_name
+        - created_at
+        - is_active
       properties:
         user_id:
           type: string
