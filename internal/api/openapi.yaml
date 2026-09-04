@@ -141,6 +141,7 @@ components:
           type: string
         display_name:
           type: string
+          maxLength: 50
 
     UpdateUserRequest:
       type: object
@@ -149,6 +150,7 @@ components:
       properties:
         display_name:
           type: string
+          maxLength: 50
 
     UserResponse:
       type: object

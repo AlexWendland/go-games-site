@@ -88,6 +88,55 @@ func checkCookie(t *testing.T, w *httptest.ResponseRecorder, name, expected stri
 	}
 }
 
+func TestValidateUserID(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{"empty", "", true},
+		{"leading space", " alex", true},
+		{"trailing space", "alex ", true},
+		{"both spaces", " alex ", true},
+		{"single char", "a", false},
+		{"normal", "alex", false},
+		{"with internal spaces", "alex smith", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateUserID(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateUserID(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidateDisplayName(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{"empty", "", true},
+		{"only spaces", "   ", true},
+		{"single space", " ", true},
+		{"exceeds 50 chars", strings.Repeat("a", 51), true},
+		{"exactly 50 chars", strings.Repeat("a", 50), false},
+		{"leading space but has content", " alex", false},
+		{"trailing space but has content", "alex ", false},
+		{"normal", "Alex Smith", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateDisplayName(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateDisplayName(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestCreateSession(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -103,6 +152,12 @@ func TestCreateSession(t *testing.T) {
 		}, http.StatusBadRequest, NO_COOKIE, NO_COOKIE, NO_COOKIE},
 		{"empty input", `{}`, func(ctx context.Context, userID string, createdAt time.Time) (*domain.User, *domain.Session, error) {
 			return &domain.User{}, &domain.Session{}, nil
+		}, http.StatusBadRequest, NO_COOKIE, NO_COOKIE, NO_COOKIE},
+		{"user_id with leading space", `{"user_id": " alex"}`, func(ctx context.Context, userID string, createdAt time.Time) (*domain.User, *domain.Session, error) {
+			return nil, nil, nil
+		}, http.StatusBadRequest, NO_COOKIE, NO_COOKIE, NO_COOKIE},
+		{"user_id with trailing space", `{"user_id": "alex "}`, func(ctx context.Context, userID string, createdAt time.Time) (*domain.User, *domain.Session, error) {
+			return nil, nil, nil
 		}, http.StatusBadRequest, NO_COOKIE, NO_COOKIE, NO_COOKIE},
 		{"works correct", `{"user_id": "alex"}`, func(ctx context.Context, userID string, createdAt time.Time) (*domain.User, *domain.Session, error) {
 			return &domain.User{
@@ -247,6 +302,12 @@ func TestGetUser(t *testing.T) {
 		{"missing user_id", "/user", func(ctx context.Context, userID string) (*domain.User, error) {
 			return nil, nil
 		}, http.StatusBadRequest, nil, "user_id is required\n"},
+		{"user_id with leading space", "/user?user_id=+alex", func(ctx context.Context, userID string) (*domain.User, error) {
+			return nil, nil
+		}, http.StatusBadRequest, nil, "user ID must not start or end with a space\n"},
+		{"user_id with trailing space", "/user?user_id=alex+", func(ctx context.Context, userID string) (*domain.User, error) {
+			return nil, nil
+		}, http.StatusBadRequest, nil, "user ID must not start or end with a space\n"},
 		{"user not found", "/user?user_id=alex", func(ctx context.Context, userID string) (*domain.User, error) {
 			return nil, domain.ErrUserNotFound
 		}, http.StatusNotFound, nil, "user not found\n"},
@@ -312,6 +373,18 @@ func TestCreateUser(t *testing.T) {
 		{"unknown fields", `{"user_id": "alex", "display_name": "Alex", "unknown": "field"}`, func(ctx context.Context, userID string, displayName string, createdAt time.Time) (*domain.User, error) {
 			return nil, nil
 		}, http.StatusBadRequest, nil, "invalid request body\n"},
+		{"user_id with leading space", `{"user_id": " alex", "display_name": "Alex"}`, func(ctx context.Context, userID string, displayName string, createdAt time.Time) (*domain.User, error) {
+			return nil, nil
+		}, http.StatusBadRequest, nil, "user ID must not start or end with a space\n"},
+		{"user_id with trailing space", `{"user_id": "alex ", "display_name": "Alex"}`, func(ctx context.Context, userID string, displayName string, createdAt time.Time) (*domain.User, error) {
+			return nil, nil
+		}, http.StatusBadRequest, nil, "user ID must not start or end with a space\n"},
+		{"display_name all spaces", `{"user_id": "alex", "display_name": "   "}`, func(ctx context.Context, userID string, displayName string, createdAt time.Time) (*domain.User, error) {
+			return nil, nil
+		}, http.StatusBadRequest, nil, "display name must contain at least one non-space character\n"},
+		{"display_name too long", `{"user_id": "alex", "display_name": "` + strings.Repeat("a", 51) + `"}`, func(ctx context.Context, userID string, displayName string, createdAt time.Time) (*domain.User, error) {
+			return nil, nil
+		}, http.StatusBadRequest, nil, "display name must be 50 characters or fewer\n"},
 		{"user already exists", `{"user_id": "alex", "display_name": "Alex"}`, func(ctx context.Context, userID string, displayName string, createdAt time.Time) (*domain.User, error) {
 			return nil, domain.ErrUserExists
 		}, http.StatusConflict, nil, "user already exists\n"},
@@ -380,6 +453,14 @@ func TestUpdateUser(t *testing.T) {
 			func(r *http.Request) (*domain.User, bool) { return nil, false },
 			func(ctx context.Context, userID string, displayName string) (*domain.User, error) { return nil, nil },
 			http.StatusBadRequest, nil, "invalid request body\n"},
+		{"display_name all spaces", `{"display_name": "   "}`,
+			func(r *http.Request) (*domain.User, bool) { return nil, false },
+			func(ctx context.Context, userID string, displayName string) (*domain.User, error) { return nil, nil },
+			http.StatusBadRequest, nil, "display name must contain at least one non-space character\n"},
+		{"display_name too long", `{"display_name": "` + strings.Repeat("a", 51) + `"}`,
+			func(r *http.Request) (*domain.User, bool) { return nil, false },
+			func(ctx context.Context, userID string, displayName string) (*domain.User, error) { return nil, nil },
+			http.StatusBadRequest, nil, "display name must be 50 characters or fewer\n"},
 		{"no user in context", `{"display_name": "Alex"}`,
 			func(r *http.Request) (*domain.User, bool) { return nil, false },
 			func(ctx context.Context, userID string, displayName string) (*domain.User, error) { return nil, nil },

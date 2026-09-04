@@ -12,6 +12,7 @@ import (
 	"github.com/AlexWendland/go-games-site/internal/config"
 	"github.com/AlexWendland/go-games-site/internal/db"
 	"github.com/AlexWendland/go-games-site/internal/db/migrations"
+	"github.com/AlexWendland/go-games-site/internal/middleware"
 	"github.com/AlexWendland/go-games-site/internal/service"
 	"github.com/AlexWendland/go-games-site/internal/web"
 )
@@ -59,7 +60,9 @@ func main() {
 	// Add handlers here
 	server.Handle("/", web.WebServerHandler())
 	server.Handle("/api/", corsMiddleware.Handler(
-		http.StripPrefix("/api", api.ApiHandler(cfg, authService, userService)),
+		middleware.Logging(
+			http.StripPrefix("/api", api.ApiHandler(cfg, authService, userService)),
+		),
 	))
 
 	addr := fmt.Sprintf(":%d", cfg.Port)

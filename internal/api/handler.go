@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/AlexWendland/go-games-site/internal/config"
@@ -31,6 +33,26 @@ type Handler struct {
 	userService UserService
 }
 
+func validateUserID(id string) error {
+	if len(id) == 0 {
+		return fmt.Errorf("user ID must not be empty")
+	}
+	if id != strings.TrimSpace(id) {
+		return fmt.Errorf("user ID must not start or end with a space")
+	}
+	return nil
+}
+
+func validateDisplayName(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("display name must contain at least one non-space character")
+	}
+	if len(name) > 50 {
+		return fmt.Errorf("display name must be 50 characters or fewer")
+	}
+	return nil
+}
+
 func toUserResponse(u *domain.User) UserResponse {
 	return UserResponse{
 		UserId:      u.UserId,
@@ -52,8 +74,12 @@ func (h Handler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	var req LogInRequest
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(&req); err != nil || req.UserId == "" {
+	if err := dec.Decode(&req); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if err := validateUserID(req.UserId); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -154,6 +180,14 @@ func (h Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
+	if err := validateUserID(req.UserId); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := validateDisplayName(req.DisplayName); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	user, err := h.userService.CreateUser(r.Context(), req.UserId, req.DisplayName, time.Now())
 	if err != nil {
 		if errors.Is(err, domain.ErrUserExists) {
@@ -172,6 +206,10 @@ func (h Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&req); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if err := validateDisplayName(req.DisplayName); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	user, ok := h.authService.UserFromRequest(r)
@@ -193,6 +231,11 @@ func (h Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "user_id is required", http.StatusBadRequest)
 		return
 	}
+	if err := validateUserID(userId); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	user, err := h.userService.GetUser(r.Context(), userId)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
