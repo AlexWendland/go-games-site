@@ -18,6 +18,25 @@ type Error struct {
 	Message *string `json:"message,omitempty"`
 }
 
+// GameActionRequest defines model for GameActionRequest.
+type GameActionRequest struct {
+	Payload map[string]interface{} `json:"payload"`
+
+	// Type Command type
+	Type string `json:"type"`
+}
+
+// GameCreatedResponse defines model for GameCreatedResponse.
+type GameCreatedResponse struct {
+	GameId string `json:"game_id"`
+}
+
+// GameMetadataResponse defines model for GameMetadataResponse.
+type GameMetadataResponse struct {
+	GameType string                  `json:"game_type"`
+	Metadata *map[string]interface{} `json:"metadata,omitempty"`
+}
+
 // LogInRequest defines model for LogInRequest.
 type LogInRequest struct {
 	UserId string `json:"user_id"`
@@ -39,6 +58,9 @@ type UserResponse struct {
 // BadRequest defines model for BadRequest.
 type BadRequest = Error
 
+// CreatedGame defines model for CreatedGame.
+type CreatedGame = GameCreatedResponse
+
 // NotFound defines model for NotFound.
 type NotFound = Error
 
@@ -52,6 +74,9 @@ type CheckIfUserExistsParams struct {
 
 // LogInJSONRequestBody defines body for LogIn for application/json ContentType.
 type LogInJSONRequestBody = LogInRequest
+
+// MakeActionJSONRequestBody defines body for MakeAction for application/json ContentType.
+type MakeActionJSONRequestBody = GameActionRequest
 
 // CreateUserJSONRequestBody defines body for CreateUser for application/json ContentType.
 type CreateUserJSONRequestBody = CreateUserRequest
