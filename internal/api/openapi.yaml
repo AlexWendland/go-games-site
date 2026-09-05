@@ -49,7 +49,6 @@ paths:
                 $ref: '#/components/schemas/UserResponse'
         '401':
           $ref: '#/components/responses/Unauthorised'
-        
 
   /api/user:
     get:
@@ -114,6 +113,83 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorised'
+  /api/game/tictactoe:
+    post:
+      summary: Create tictactoe game
+      operationId: createGame
+      responses:
+        '201':
+          $ref: '#/components/responses/CreatedGame'
+        '401':
+          $ref: '#/components/responses/Unauthorised'
+  /api/game/{game_id}/metadata:
+    get:
+      summary: Gets the metadata of a given game id
+      operationId: getGameMetadata
+      parameters:
+        - name: game_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Game metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameMetadataResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorised'
+  /api/game/{game_id}/stream:
+    get:
+      summary: Subscribe to the game event stream
+      operationId: getGameStream
+      parameters:
+        - name: game_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Game event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorised'
+  /api/game/{game_id}/action:
+    post:
+      summary: Make an action within the game
+      operationId: makeAction
+      parameters:
+        - name: game_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GameActionRequest'
+      responses:
+        '200':
+          description: Request to make action placed
+        '400':
+          description: Invalid move
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorised'
+
 
 components:
   securitySchemes:
@@ -176,6 +252,39 @@ components:
         message:
           type: string
 
+    GameCreatedResponse:
+      type: object
+      required:
+        - game_id
+      properties:
+        game_id:
+          type: string
+
+    GameMetadataResponse:
+      type: object
+      required:
+        - game_type
+      properties:
+        game_type:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+
+    GameActionRequest:
+      type: object
+      required:
+        - type
+        - payload
+      properties:
+        type:
+          type: string
+          description: Command type
+        payload:
+          type: object
+          additionalProperties: true
+
+
   responses:
     BadRequest:
       description: Bad request
@@ -195,3 +304,9 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
+    CreatedGame:
+      description: Game created
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/GameCreatedResponse'
