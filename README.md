@@ -40,3 +40,8 @@ git update-index --assume-unchanged ui/dist/.gitkeep
 ```
 
 This will leave the .gitkeep file untracked as make will delete it upon clean.
+
+## Todo
+
+- [ ] Add game AI stuff
+- [ ] Handle old games - don't start up a new room but design a flow to just send the old states so people can replay them.
