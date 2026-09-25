@@ -35,8 +35,8 @@ CREATE TABLE games (
     created_at    TIMESTAMP NOT NULL,
     updated_at    TIMESTAMP NOT NULL,
     finished_at   TIMESTAMP,
-    state_version INTEGER   NOT NULL,
-    state         JSON
+    state         JSON,
+    metadata      JSON
 );
 
 CREATE TABLE positions (
@@ -46,6 +46,7 @@ CREATE TABLE positions (
     ai_user_id INTEGER            REFERENCES ai_users(id),
     position   INTEGER   NOT NULL,
     joined_at  TIMESTAMP NOT NULL,
+    left_at    TIMESTAMP,
     CHECK (
         (user_id IS NOT NULL AND ai_user_id IS NULL) OR
         (user_id IS NULL AND ai_user_id IS NOT NULL)
@@ -55,12 +56,16 @@ CREATE TABLE positions (
 CREATE TABLE game_events (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     game_id         INTEGER   NOT NULL REFERENCES games(id),
-    position        INTEGER   NOT NULL,
+    user_id         INTEGER            REFERENCES users(id),
+    ai_user_id      INTEGER            REFERENCES ai_users(id),
     sequence_number INTEGER   NOT NULL,
-    event_version   INTEGER   NOT NULL,
     event_type      TEXT      NOT NULL,
     data            JSON,
     created_at      TIMESTAMP NOT NULL
+    CHECK (
+        (user_id IS NOT NULL AND ai_user_id IS NULL) OR
+        (user_id IS NULL AND ai_user_id IS NOT NULL)
+    )
 );
 
 CREATE UNIQUE INDEX idx_game_events_sequence ON game_events (game_id, sequence_number);

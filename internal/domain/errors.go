@@ -8,4 +8,5 @@ var (
 	ErrUserExists      = errors.New("user already exists")
 	ErrSessionNotFound = errors.New("session not found")
 	ErrDatabase        = errors.New("database error")
+	ErrInternal        = errors.New("internal error")
 )
