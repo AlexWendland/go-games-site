@@ -26,6 +26,7 @@ type GameStub struct {
 	getSaveState   func() json.RawMessage
 	getGameStatus  func() string
 	setGameState   func(gameState json.RawMessage)
+	getMaxPlayers  func() domain.PlayerPositionNumber
 }
 
 func (g GameStub) MakeMove(playerPosition domain.PlayerPositionNumber, moveData json.RawMessage) error {
@@ -52,8 +53,12 @@ func (g GameStub) SetGameState(gameState json.RawMessage) {
 	g.setGameState(gameState)
 }
 
+func (g GameStub) GetMaxPlayers() domain.PlayerPositionNumber {
+	return g.getMaxPlayers()
+}
+
 type GameDbServiceStub struct {
-	saveGameEvent             func(ctx context.Context, gameId string, userId domain.PlayerId, sequenceNumber int, eventType string, payload json.RawMessage, createdAt time.Time) error
+	saveGameEvent             func(ctx context.Context, gameId string, position domain.PlayerPositionNumber, sequenceNumber int, payload json.RawMessage, createdAt time.Time) error
 	saveGameState             func(ctx context.Context, gameId string, updateTime time.Time, newState json.RawMessage, gameStatus string) error
 	markPlayerJoined          func(ctx context.Context, gameId string, positionToAdd domain.PlayerPosition, joinTime time.Time) error
 	markPlayerLeft            func(ctx context.Context, gameId string, positionToRemove domain.PlayerPosition, leaveTime time.Time) error
@@ -63,8 +68,8 @@ type GameDbServiceStub struct {
 	withTx                    func(ctx context.Context, fn func(GameDbService) error) error
 }
 
-func (s GameDbServiceStub) SaveGameEvent(ctx context.Context, gameId string, userId domain.PlayerId, sequenceNumber int, eventType string, payload json.RawMessage, createdAt time.Time) error {
-	return s.saveGameEvent(ctx, gameId, userId, sequenceNumber, eventType, payload, createdAt)
+func (s GameDbServiceStub) SaveGameEvent(ctx context.Context, gameId string, position domain.PlayerPositionNumber, sequenceNumber int, payload json.RawMessage, createdAt time.Time) error {
+	return s.saveGameEvent(ctx, gameId, position, sequenceNumber, payload, createdAt)
 }
 
 func (s GameDbServiceStub) SaveGameState(ctx context.Context, gameId string, updateTime time.Time, newState json.RawMessage, gameStatus string) error {
@@ -75,7 +80,7 @@ func (s GameDbServiceStub) MarkPlayerJoined(ctx context.Context, gameId string, 
 	return s.markPlayerJoined(ctx, gameId, positionToAdd, joinTime)
 }
 
-func (s GameDbServiceStub) MarkPlayeLeft(ctx context.Context, gameId string, positionToRemove domain.PlayerPosition, leaveTime time.Time) error {
+func (s GameDbServiceStub) MarkPlayerLeft(ctx context.Context, gameId string, positionToRemove domain.PlayerPosition, leaveTime time.Time) error {
 	return s.markPlayerLeft(ctx, gameId, positionToRemove, leaveTime)
 }
 
@@ -551,7 +556,7 @@ func makePassthroughDb(saveStateErr, saveEventErr error) GameDbServiceStub {
 		saveGameState: func(_ context.Context, _ string, _ time.Time, _ json.RawMessage, _ string) error {
 			return saveStateErr
 		},
-		saveGameEvent: func(_ context.Context, _ string, _ domain.PlayerId, _ int, _ string, _ json.RawMessage, _ time.Time) error {
+		saveGameEvent: func(_ context.Context, _ string, _ domain.PlayerPositionNumber, _ int, _ json.RawMessage, _ time.Time) error {
 			return saveEventErr
 		},
 	}
@@ -661,7 +666,7 @@ func Test_handleMoveAction(t *testing.T) {
 				capturedStatus = gameStatus
 				return nil
 			},
-			saveGameEvent: func(_ context.Context, _ string, _ domain.PlayerId, _ int, _ string, _ json.RawMessage, _ time.Time) error {
+			saveGameEvent: func(_ context.Context, _ string, _ domain.PlayerPositionNumber, _ int, _ json.RawMessage, _ time.Time) error {
 				return nil
 			},
 		}

@@ -21,13 +21,14 @@ type Game interface {
 	GetSaveState() json.RawMessage
 	GetGameStatus() string
 	SetGameState(gameState json.RawMessage)
+	GetMaxPlayers() domain.PlayerPositionNumber
 }
 
 type GameDbService interface {
-	SaveGameEvent(ctx context.Context, gameId string, userId domain.PlayerId, sequenceNumber int, eventType string, payload json.RawMessage, createdAt time.Time) error
+	SaveGameEvent(ctx context.Context, gameId string, position domain.PlayerPositionNumber, sequenceNumber int, payload json.RawMessage, createdAt time.Time) error
 	SaveGameState(ctx context.Context, gameId string, updateTime time.Time, newState json.RawMessage, gameStatus string) error
 	MarkPlayerJoined(ctx context.Context, gameId string, positionToAdd domain.PlayerPosition, joinTime time.Time) error
-	MarkPlayeLeft(ctx context.Context, gameId string, positionToRemove domain.PlayerPosition, leaveTime time.Time) error
+	MarkPlayerLeft(ctx context.Context, gameId string, positionToRemove domain.PlayerPosition, leaveTime time.Time) error
 	GetCurrentPlayerPositions(ctx context.Context, gameId string) ([]domain.PlayerPosition, error)
 	// TODO: Define some type to represent an AI player so we can start them.
 	GetCurrentAiPlayers(ctx context.Context, gameId string) []string
@@ -200,7 +201,7 @@ func (l *Lobby) handleMoveAction(ctx context.Context, userId domain.PlayerId, pa
 		if err != nil {
 			return err
 		}
-		return db.SaveGameEvent(ctx, l.gameId, userId, l.eventCount, domain.MoveGameEvent, payload, timeOfChange)
+		return db.SaveGameEvent(ctx, l.gameId, playerPosition, l.eventCount, payload, timeOfChange)
 	})
 	if err != nil {
 		// Perform roll back
