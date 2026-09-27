@@ -3,6 +3,7 @@ package lobby
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -21,13 +22,14 @@ type Game interface {
 	GetSaveState() json.RawMessage
 	GetGameStatus() string
 	SetGameState(gameState json.RawMessage)
+	GetMaxPlayers() domain.PlayerPositionNumber
 }
 
 type GameDbService interface {
-	SaveGameEvent(ctx context.Context, gameId string, userId domain.PlayerId, sequenceNumber int, eventType string, payload json.RawMessage, createdAt time.Time) error
+	SaveGameEvent(ctx context.Context, gameId string, position domain.PlayerPositionNumber, sequenceNumber int, payload json.RawMessage, createdAt time.Time) error
 	SaveGameState(ctx context.Context, gameId string, updateTime time.Time, newState json.RawMessage, gameStatus string) error
 	MarkPlayerJoined(ctx context.Context, gameId string, positionToAdd domain.PlayerPosition, joinTime time.Time) error
-	MarkPlayeLeft(ctx context.Context, gameId string, positionToRemove domain.PlayerPosition, leaveTime time.Time) error
+	MarkPlayerLeft(ctx context.Context, gameId string, positionToRemove domain.PlayerPosition, leaveTime time.Time) error
 	GetCurrentPlayerPositions(ctx context.Context, gameId string) ([]domain.PlayerPosition, error)
 	// TODO: Define some type to represent an AI player so we can start them.
 	GetCurrentAiPlayers(ctx context.Context, gameId string) []string
@@ -200,7 +202,7 @@ func (l *Lobby) handleMoveAction(ctx context.Context, userId domain.PlayerId, pa
 		if err != nil {
 			return err
 		}
-		return db.SaveGameEvent(ctx, l.gameId, userId, l.eventCount, domain.MoveGameEvent, payload, timeOfChange)
+		return db.SaveGameEvent(ctx, l.gameId, playerPosition, l.eventCount, payload, timeOfChange)
 	})
 	if err != nil {
 		// Perform roll back
@@ -219,8 +221,95 @@ func (l *Lobby) handleMoveAction(ctx context.Context, userId domain.PlayerId, pa
 	})
 }
 
-func (l *Lobby) handleLobbyAction(context context.Context, userId domain.PlayerId, payload json.RawMessage) {
-	// TODO: Implement this.
+func (l *Lobby) handleJoinLobbyAction(ctx context.Context, userId domain.PlayerId, position domain.PlayerPositionNumber) error {
+	if _, ok := l.positionToPlayer[position]; ok {
+		l.sendErrorToUser(userId, l.eventCount, fmt.Sprintf("position %d already taken", position))
+		return domain.ErrUserError
+	}
+	if position >= l.game.GetMaxPlayers() {
+		l.sendErrorToUser(userId, l.eventCount, fmt.Sprintf("position %d exceeds max players %d", position, l.game.GetMaxPlayers()))
+		return domain.ErrUserError
+	}
+	actionTime := time.Now()
+	oldPosition, wasInGame := l.getPlayerPosition(userId)
+	err := l.dbService.WithTx(ctx, func(tx GameDbService) error {
+		if wasInGame {
+			err := tx.MarkPlayerLeft(ctx, l.gameId, domain.PlayerPosition{Position: oldPosition, Player: userId}, actionTime)
+			if err != nil {
+				return err
+			}
+		}
+		return tx.MarkPlayerJoined(ctx, l.gameId, domain.PlayerPosition{Position: position, Player: userId}, actionTime)
+	})
+	if err != nil {
+		l.sendErrorToUser(userId, l.eventCount, "database error please try again")
+		slog.Warn("database error to join lobby", "gameId", l.gameId, "position", position, "player", userId)
+		return err
+	}
+	if wasInGame {
+		delete(l.positionToPlayer, oldPosition)
+		slog.Debug("player left position", "gameId", l.gameId, "position", oldPosition, "player", userId)
+	}
+	l.positionToPlayer[position] = userId
+	slog.Debug("player joined position", "gameId", l.gameId, "position", position, "player", userId)
+	return nil
+}
+
+func (l *Lobby) handleLeaveLobbyAction(ctx context.Context, userId domain.PlayerId, position domain.PlayerPositionNumber) error {
+	playerCurrentPosition, isInGame := l.getPlayerPosition(userId)
+	if !isInGame || playerCurrentPosition != position {
+		l.sendErrorToUser(userId, l.eventCount, fmt.Sprintf("player is not in position %d", position))
+		return domain.ErrUserError
+	}
+	err := l.dbService.MarkPlayerLeft(ctx, l.gameId, domain.PlayerPosition{Position: position, Player: userId}, time.Now())
+	if err != nil {
+		slog.Warn("database error to leave lobby", "gameId", l.gameId, "position", position, "player", userId)
+		return err
+	}
+	delete(l.positionToPlayer, position)
+	slog.Debug("player left position", "gameId", l.gameId, "position", position, "player", userId)
+	return nil
+}
+
+// Structure of the lobby action.
+//
+//	{
+//		"action" : "join/leave",
+//		"position" : 0/1/...
+//	}
+func (l *Lobby) handleLobbyAction(ctx context.Context, userId domain.PlayerId, payload json.RawMessage) {
+	var action LobbyActionPayload
+	if err := json.Unmarshal(payload, &action); err != nil {
+		l.sendErrorToUser(userId, l.eventCount, "invalid lobby action payload")
+		return
+	}
+	var err error
+	switch action.Action {
+	case "join":
+		err = l.handleJoinLobbyAction(ctx, userId, action.Position)
+	case "leave":
+		err = l.handleLeaveLobbyAction(ctx, userId, action.Position)
+	default:
+		l.sendErrorToUser(userId, l.eventCount, "invalid lobby action")
+		err = domain.ErrUserError
+	}
+	if err != nil {
+		return
+	}
+	// Create lobby payload
+	var lobbyPlayers []domain.PlayerPosition
+	for position, player := range l.positionToPlayer {
+		lobbyPlayers = append(lobbyPlayers, domain.PlayerPosition{Position: position, Player: player})
+	}
+	lobbyPayload, err := json.Marshal(LobbyUpdatePayload{lobbyPlayers})
+	if err != nil {
+		slog.Error("failed to marshal lobby messages to send to users", "gameId", l.gameId)
+		return
+	}
+	l.broadcast(l.eventCount, domain.LobbyUpdateType, func(player domain.PlayerId) json.RawMessage {
+		return lobbyPayload
+	})
+	l.eventCount++
 }
 
 func (l *Lobby) handleAiAction(context context.Context, userId domain.PlayerId, payload json.RawMessage) {

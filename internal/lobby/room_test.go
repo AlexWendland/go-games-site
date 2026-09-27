@@ -26,6 +26,7 @@ type GameStub struct {
 	getSaveState   func() json.RawMessage
 	getGameStatus  func() string
 	setGameState   func(gameState json.RawMessage)
+	getMaxPlayers  func() domain.PlayerPositionNumber
 }
 
 func (g GameStub) MakeMove(playerPosition domain.PlayerPositionNumber, moveData json.RawMessage) error {
@@ -52,8 +53,12 @@ func (g GameStub) SetGameState(gameState json.RawMessage) {
 	g.setGameState(gameState)
 }
 
+func (g GameStub) GetMaxPlayers() domain.PlayerPositionNumber {
+	return g.getMaxPlayers()
+}
+
 type GameDbServiceStub struct {
-	saveGameEvent             func(ctx context.Context, gameId string, userId domain.PlayerId, sequenceNumber int, eventType string, payload json.RawMessage, createdAt time.Time) error
+	saveGameEvent             func(ctx context.Context, gameId string, position domain.PlayerPositionNumber, sequenceNumber int, payload json.RawMessage, createdAt time.Time) error
 	saveGameState             func(ctx context.Context, gameId string, updateTime time.Time, newState json.RawMessage, gameStatus string) error
 	markPlayerJoined          func(ctx context.Context, gameId string, positionToAdd domain.PlayerPosition, joinTime time.Time) error
 	markPlayerLeft            func(ctx context.Context, gameId string, positionToRemove domain.PlayerPosition, leaveTime time.Time) error
@@ -63,8 +68,8 @@ type GameDbServiceStub struct {
 	withTx                    func(ctx context.Context, fn func(GameDbService) error) error
 }
 
-func (s GameDbServiceStub) SaveGameEvent(ctx context.Context, gameId string, userId domain.PlayerId, sequenceNumber int, eventType string, payload json.RawMessage, createdAt time.Time) error {
-	return s.saveGameEvent(ctx, gameId, userId, sequenceNumber, eventType, payload, createdAt)
+func (s GameDbServiceStub) SaveGameEvent(ctx context.Context, gameId string, position domain.PlayerPositionNumber, sequenceNumber int, payload json.RawMessage, createdAt time.Time) error {
+	return s.saveGameEvent(ctx, gameId, position, sequenceNumber, payload, createdAt)
 }
 
 func (s GameDbServiceStub) SaveGameState(ctx context.Context, gameId string, updateTime time.Time, newState json.RawMessage, gameStatus string) error {
@@ -75,7 +80,7 @@ func (s GameDbServiceStub) MarkPlayerJoined(ctx context.Context, gameId string, 
 	return s.markPlayerJoined(ctx, gameId, positionToAdd, joinTime)
 }
 
-func (s GameDbServiceStub) MarkPlayeLeft(ctx context.Context, gameId string, positionToRemove domain.PlayerPosition, leaveTime time.Time) error {
+func (s GameDbServiceStub) MarkPlayerLeft(ctx context.Context, gameId string, positionToRemove domain.PlayerPosition, leaveTime time.Time) error {
 	return s.markPlayerLeft(ctx, gameId, positionToRemove, leaveTime)
 }
 
@@ -509,6 +514,77 @@ func Test_broadcast(t *testing.T) {
 	})
 }
 
+// dbCallLog records calls to MarkPlayerJoined and MarkPlayerLeft.
+type dbCallLog struct {
+	joined []domain.PlayerPosition
+	left   []domain.PlayerPosition
+}
+
+// makeLobbyDb builds a GameDbServiceStub that records join/leave calls and returns
+// the given errors. WithTx passes itself to the callback (same as makePassthroughDb).
+func makeLobbyDb(joinErr, leaveErr error) (*dbCallLog, GameDbServiceStub) {
+	log := &dbCallLog{}
+	var db GameDbServiceStub
+	db = GameDbServiceStub{
+		withTx: func(ctx context.Context, fn func(GameDbService) error) error {
+			return fn(db)
+		},
+		markPlayerJoined: func(_ context.Context, _ string, pos domain.PlayerPosition, _ time.Time) error {
+			log.joined = append(log.joined, pos)
+			return joinErr
+		},
+		markPlayerLeft: func(_ context.Context, _ string, pos domain.PlayerPosition, _ time.Time) error {
+			log.left = append(log.left, pos)
+			return leaveErr
+		},
+	}
+	return log, db
+}
+
+// makeLobbyLobby builds a Lobby with the given player positions and max players.
+func makeLobbyLobby(positions []domain.PlayerPosition, maxPlayers domain.PlayerPositionNumber, db GameDbService) *Lobby {
+	positionToPlayer, _ := createPlayerPositionMap(positions)
+	return &Lobby{
+		subscribers:      make(map[int]Subscriber),
+		positionToPlayer: positionToPlayer,
+		game:             GameStub{getMaxPlayers: func() domain.PlayerPositionNumber { return maxPlayers }},
+		dbService:        db,
+		eventCount:       0,
+	}
+}
+
+// assertLobbyBroadcast checks that ch contains a LobbyUpdateType message with the expected players.
+// Order of players in the payload is ignored.
+func assertLobbyBroadcast(t *testing.T, ch <-chan json.RawMessage, wantSeq int, wantPlayers []domain.PlayerPosition) {
+	t.Helper()
+	select {
+	case msg := <-ch:
+		var update GameUpdate
+		if err := json.Unmarshal(msg, &update); err != nil {
+			t.Fatalf("could not unmarshal GameUpdate: %v", err)
+		}
+		if update.MessageType != domain.LobbyUpdateType {
+			t.Errorf("MessageType = %s, want %s", update.MessageType, domain.LobbyUpdateType)
+		}
+		if update.SequenceNumber != wantSeq {
+			t.Errorf("SequenceNumber = %d, want %d", update.SequenceNumber, wantSeq)
+		}
+		var payload LobbyUpdatePayload
+		if err := json.Unmarshal(update.Payload, &payload); err != nil {
+			t.Fatalf("could not unmarshal LobbyUpdatePayload: %v", err)
+		}
+		opts := cmp.Options{
+			cmpopts.SortSlices(func(a, b domain.PlayerPosition) bool { return a.Position < b.Position }),
+			cmpopts.EquateEmpty(),
+		}
+		if diff := cmp.Diff(wantPlayers, payload.Players, opts...); diff != "" {
+			t.Errorf("lobby players mismatch (-want +got):\n%s", diff)
+		}
+	default:
+		t.Error("channel had no lobby broadcast")
+	}
+}
+
 // makeCountingGameStub creates a GameStub backed by an integer counter.
 // A move payload of json `true` increments the counter; anything else returns an error.
 // GetSaveState/SetGameState serialise and restore the counter for rollback testing.
@@ -551,7 +627,7 @@ func makePassthroughDb(saveStateErr, saveEventErr error) GameDbServiceStub {
 		saveGameState: func(_ context.Context, _ string, _ time.Time, _ json.RawMessage, _ string) error {
 			return saveStateErr
 		},
-		saveGameEvent: func(_ context.Context, _ string, _ domain.PlayerId, _ int, _ string, _ json.RawMessage, _ time.Time) error {
+		saveGameEvent: func(_ context.Context, _ string, _ domain.PlayerPositionNumber, _ int, _ json.RawMessage, _ time.Time) error {
 			return saveEventErr
 		},
 	}
@@ -661,7 +737,7 @@ func Test_handleMoveAction(t *testing.T) {
 				capturedStatus = gameStatus
 				return nil
 			},
-			saveGameEvent: func(_ context.Context, _ string, _ domain.PlayerId, _ int, _ string, _ json.RawMessage, _ time.Time) error {
+			saveGameEvent: func(_ context.Context, _ string, _ domain.PlayerPositionNumber, _ int, _ json.RawMessage, _ time.Time) error {
 				return nil
 			},
 		}
@@ -671,6 +747,240 @@ func Test_handleMoveAction(t *testing.T) {
 
 		if capturedStatus != domain.FinishedGameStatus {
 			t.Errorf("gameStatus = %q, want %q", capturedStatus, domain.FinishedGameStatus)
+		}
+	})
+}
+
+func Test_handleLeaveLobbyAction(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("player not in game gets error", func(t *testing.T) {
+		_, db := makeLobbyDb(nil, nil)
+		l := makeLobbyLobby(nil, 2, db)
+		ch, _ := l.AddSubscriber(Player1)
+
+		err := l.handleLeaveLobbyAction(ctx, Player1, 0)
+
+		if err == nil {
+			t.Error("expected error, got nil")
+		}
+		assertErrorMessage(t, ch, 0, "player is not in position 0")
+	})
+
+	t.Run("player in game but wrong position gets error", func(t *testing.T) {
+		_, db := makeLobbyDb(nil, nil)
+		l := makeLobbyLobby([]domain.PlayerPosition{{Position: 1, Player: Player1}}, 2, db)
+		ch, _ := l.AddSubscriber(Player1)
+
+		err := l.handleLeaveLobbyAction(ctx, Player1, 0)
+
+		if err == nil {
+			t.Error("expected error, got nil")
+		}
+		assertErrorMessage(t, ch, 0, "player is not in position 0")
+		if _, ok := l.positionToPlayer[1]; !ok {
+			t.Error("player was incorrectly removed from their actual position")
+		}
+	})
+
+	t.Run("DB error leaves in-memory state unchanged", func(t *testing.T) {
+		_, db := makeLobbyDb(nil, domain.ErrDatabase)
+		l := makeLobbyLobby([]domain.PlayerPosition{{Position: 0, Player: Player1}}, 2, db)
+
+		err := l.handleLeaveLobbyAction(ctx, Player1, 0)
+
+		if err == nil {
+			t.Error("expected error, got nil")
+		}
+		if _, ok := l.positionToPlayer[0]; !ok {
+			t.Error("player was removed from position despite DB error")
+		}
+	})
+
+	t.Run("success removes player from position and calls DB", func(t *testing.T) {
+		calls, db := makeLobbyDb(nil, nil)
+		l := makeLobbyLobby([]domain.PlayerPosition{{Position: 0, Player: Player1}}, 2, db)
+
+		err := l.handleLeaveLobbyAction(ctx, Player1, 0)
+
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if _, ok := l.positionToPlayer[0]; ok {
+			t.Error("player still in position after leave")
+		}
+		wantLeft := []domain.PlayerPosition{{Position: 0, Player: Player1}}
+		if diff := cmp.Diff(wantLeft, calls.left); diff != "" {
+			t.Errorf("MarkPlayerLeft calls mismatch (-want +got):\n%s", diff)
+		}
+	})
+}
+
+func Test_handleJoinLobbyAction(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("position already taken gets error", func(t *testing.T) {
+		_, db := makeLobbyDb(nil, nil)
+		l := makeLobbyLobby([]domain.PlayerPosition{{Position: 0, Player: Player2}}, 2, db)
+		ch, _ := l.AddSubscriber(Player1)
+
+		err := l.handleJoinLobbyAction(ctx, Player1, 0)
+
+		if err == nil {
+			t.Error("expected error, got nil")
+		}
+		assertErrorMessage(t, ch, 0, "position 0 already taken")
+		if l.positionToPlayer[0] != Player2 {
+			t.Error("existing player was displaced from position")
+		}
+	})
+
+	t.Run("position out of range gets error", func(t *testing.T) {
+		_, db := makeLobbyDb(nil, nil)
+		l := makeLobbyLobby(nil, 2, db)
+		ch, _ := l.AddSubscriber(Player1)
+
+		err := l.handleJoinLobbyAction(ctx, Player1, 2) // valid positions are 0 and 1
+
+		if err == nil {
+			t.Error("expected error, got nil")
+		}
+		assertErrorMessage(t, ch, 0, "position 2 exceeds max players 2")
+	})
+
+	t.Run("DB error leaves in-memory state unchanged", func(t *testing.T) {
+		_, db := makeLobbyDb(domain.ErrDatabase, nil)
+		l := makeLobbyLobby(nil, 2, db)
+
+		err := l.handleJoinLobbyAction(ctx, Player1, 0)
+
+		if err == nil {
+			t.Error("expected error, got nil")
+		}
+		if _, ok := l.positionToPlayer[0]; ok {
+			t.Error("player added to position despite DB error")
+		}
+	})
+
+	t.Run("success adds player to position and calls DB", func(t *testing.T) {
+		calls, db := makeLobbyDb(nil, nil)
+		l := makeLobbyLobby(nil, 2, db)
+
+		err := l.handleJoinLobbyAction(ctx, Player1, 0)
+
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if player, ok := l.positionToPlayer[0]; !ok || player != Player1 {
+			t.Errorf("positionToPlayer[0] = %v, want %v", player, Player1)
+		}
+		wantJoined := []domain.PlayerPosition{{Position: 0, Player: Player1}}
+		if diff := cmp.Diff(wantJoined, calls.joined); diff != "" {
+			t.Errorf("MarkPlayerJoined calls mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("player already in game moves to new position", func(t *testing.T) {
+		calls, db := makeLobbyDb(nil, nil)
+		l := makeLobbyLobby([]domain.PlayerPosition{{Position: 0, Player: Player1}}, 2, db)
+
+		err := l.handleJoinLobbyAction(ctx, Player1, 1)
+
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if _, ok := l.positionToPlayer[0]; ok {
+			t.Error("player still in old position after move")
+		}
+		if player, ok := l.positionToPlayer[1]; !ok || player != Player1 {
+			t.Errorf("positionToPlayer[1] = %v, want %v", player, Player1)
+		}
+		wantLeft := []domain.PlayerPosition{{Position: 0, Player: Player1}}
+		if diff := cmp.Diff(wantLeft, calls.left); diff != "" {
+			t.Errorf("MarkPlayerLeft calls mismatch (-want +got):\n%s", diff)
+		}
+		wantJoined := []domain.PlayerPosition{{Position: 1, Player: Player1}}
+		if diff := cmp.Diff(wantJoined, calls.joined); diff != "" {
+			t.Errorf("MarkPlayerJoined calls mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("MarkPlayerLeft failure when already in game leaves in-memory state unchanged", func(t *testing.T) {
+		_, db := makeLobbyDb(nil, domain.ErrDatabase)
+		l := makeLobbyLobby([]domain.PlayerPosition{{Position: 0, Player: Player1}}, 2, db)
+
+		err := l.handleJoinLobbyAction(ctx, Player1, 1)
+
+		if err == nil {
+			t.Error("expected error, got nil")
+		}
+		if _, ok := l.positionToPlayer[0]; !ok {
+			t.Error("player was removed from old position despite DB error")
+		}
+		if _, ok := l.positionToPlayer[1]; ok {
+			t.Error("player was added to new position despite DB error")
+		}
+	})
+}
+
+func Test_handleLobbyAction(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("invalid payload gets error", func(t *testing.T) {
+		_, db := makeLobbyDb(nil, nil)
+		l := makeLobbyLobby(nil, 2, db)
+		ch, _ := l.AddSubscriber(Player1)
+
+		l.handleLobbyAction(ctx, Player1, json.RawMessage(`not json`))
+
+		assertErrorMessage(t, ch, 0, "invalid lobby action payload")
+	})
+
+	t.Run("unknown action gets error", func(t *testing.T) {
+		_, db := makeLobbyDb(nil, nil)
+		l := makeLobbyLobby(nil, 2, db)
+		ch, _ := l.AddSubscriber(Player1)
+
+		l.handleLobbyAction(ctx, Player1, json.RawMessage(`{"action":"teleport","position":0}`))
+
+		assertErrorMessage(t, ch, 0, "invalid lobby action")
+	})
+
+	t.Run("successful join broadcasts lobby update to all subscribers", func(t *testing.T) {
+		_, db := makeLobbyDb(nil, nil)
+		l := makeLobbyLobby([]domain.PlayerPosition{{Position: 1, Player: Player2}}, 2, db)
+		ch1, _ := l.AddSubscriber(Player1)
+		ch2, _ := l.AddSubscriber(Player2)
+
+		l.handleLobbyAction(ctx, Player1, json.RawMessage(`{"action":"join","position":0}`))
+
+		want := []domain.PlayerPosition{{Position: 0, Player: Player1}, {Position: 1, Player: Player2}}
+		assertLobbyBroadcast(t, ch1, 0, want)
+		assertLobbyBroadcast(t, ch2, 0, want)
+	})
+
+	t.Run("successful leave broadcasts lobby update", func(t *testing.T) {
+		_, db := makeLobbyDb(nil, nil)
+		l := makeLobbyLobby([]domain.PlayerPosition{{Position: 0, Player: Player1}}, 2, db)
+		ch, _ := l.AddSubscriber(Player1)
+
+		l.handleLobbyAction(ctx, Player1, json.RawMessage(`{"action":"leave","position":0}`))
+
+		assertLobbyBroadcast(t, ch, 0, nil)
+	})
+
+	t.Run("failed action does not broadcast", func(t *testing.T) {
+		_, db := makeLobbyDb(nil, nil)
+		l := makeLobbyLobby(nil, 2, db)
+		ch, _ := l.AddSubscriber(Player1)
+
+		l.handleLobbyAction(ctx, Player1, json.RawMessage(`{"action":"leave","position":0}`))
+
+		assertErrorMessage(t, ch, 0, "player is not in position 0")
+		select {
+		case msg := <-ch:
+			t.Errorf("unexpected broadcast after error: %s", msg)
+		default:
 		}
 	})
 }
