@@ -9,4 +9,5 @@ var (
 	ErrSessionNotFound = errors.New("session not found")
 	ErrDatabase        = errors.New("database error")
 	ErrInternal        = errors.New("internal error")
+	ErrUserError       = errors.New("user made error")
 )

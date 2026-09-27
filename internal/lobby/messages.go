@@ -32,3 +32,7 @@ type LobbyActionPayload struct {
 	Action   string                      `json:"action"`
 	Position domain.PlayerPositionNumber `json:"position"`
 }
+
+type LobbyUpdatePayload struct {
+	Players []domain.PlayerPosition `json:"players"`
+}
