@@ -161,15 +161,15 @@ func TestCreateSession(t *testing.T) {
 		}, http.StatusBadRequest, NO_COOKIE, NO_COOKIE, NO_COOKIE},
 		{"works correct", `{"user_id": "alex"}`, func(ctx context.Context, userID string, createdAt time.Time) (*domain.User, *domain.Session, error) {
 			return &domain.User{
-					UserId:      "alex",
-					DisplayName: "alex",
-					CreatedAt:   Date1,
-					IsActive:    true,
-				}, &domain.Session{
-					Token:     "token",
-					CreatedAt: Date1,
-					ExpiresAt: Date2,
-				}, nil
+				UserId:      "alex",
+				DisplayName: "alex",
+				CreatedAt:   Date1,
+				IsActive:    true,
+			}, &domain.Session{
+				Token:     "token",
+				CreatedAt: Date1,
+				ExpiresAt: Date2,
+			}, nil
 		}, http.StatusOK, "token", Date2.String(), "alex"},
 		{"user not found", `{"user_id": "alex"}`, func(ctx context.Context, userID string, createdAt time.Time) (*domain.User, *domain.Session, error) {
 			return nil, nil, domain.ErrUserNotFound
